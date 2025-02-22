@@ -574,6 +574,99 @@
             font-size: 1.5rem;
             cursor: pointer;
         }
+
+        .weather-container {
+            display: none;
+            width: 100%;
+            max-width: 400px;
+            background-color: #e0ebe0;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 65vh;
+            position: fixed;
+            left: 20px;
+            bottom: 80px;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.27s ease-in-out, transform 0.3s ease-in-out;
+        }
+
+        .weather-container.visible {
+            display: flex;
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .weather-header {
+            background-color: #8dc63c;
+            color: #fff;
+            padding: 15px;
+            text-align: center;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .weather-header h1 {
+            margin: 0;
+            font-size: 1.7rem;
+        }
+
+        .weather-content {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        #weather-toggle {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background-color: #8dc63c;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        #weather-close-button {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        #forecast {
+            margin-top: 20px;
+        }
+
+        #forecast h2 {
+            font-size: 1.5rem;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        #forecast div {
+            border: 1px solid #a3b18a;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        #forecast p {
+            font-size: 1rem;
+            color: #555;
+        }
     </style>
 </head>
 <body>
@@ -734,6 +827,18 @@
             <button id="send-button">Send</button>
         </div>
     </div>
+    <button id="weather-toggle">🌦️</button>
+    <div class="weather-container" id="weather-container">
+        <div class="weather-header">
+            <h1>Weather Forecast</h1>
+            <button id="weather-close-button">❎</button>
+        </div>
+        <div class="weather-content" id="weather-content">
+            <input type="text" id="cityInput" placeholder="Enter city name">
+            <button id="getForecastBtn">Get Forecast</button>
+            <div id="forecast"></div>
+        </div>
+    </div>
     <script>
         const API_KEY = 'AIzaSyDGgJ4b2U962FXqQSDQtOXuR91HK1n8qDg';
         const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent';
@@ -891,7 +996,98 @@
                 behavior: 'smooth'
             });
         });
+
+        document.getElementById('weather-toggle').addEventListener('click', function() {
+            const weatherContainer = document.getElementById('weather-container');
+            weatherContainer.classList.add('visible');
+        });
+
+        document.getElementById('weather-close-button').addEventListener('click', function() {
+            const weatherContainer = document.getElementById('weather-container');
+            weatherContainer.classList.remove('visible');
+        });
+
+        async function getCoordinates(city) {
+            const apiKey = "1b820a20703e4d3e8e2ef6af1067cd08";
+            const url = `https://api.opencagedata.com/geocode/v1/json?q=${encodeURIComponent(city)}&key=${apiKey}`;
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("Failed to fetch coordinates");
+                const data = await response.json();
+
+                if (data.results && data.results.length > 0) {
+                    const { lat, lng } = data.results[0].geometry;
+                    return { lat, lng };
+                } else {
+                    throw new Error(`Could not find coordinates for ${city}`);
+                }
+            } catch (error) {
+                console.error(error.message);
+                return null;
+            }
+        }
+
+        async function getWeatherForecast(city) {
+            const coordinates = await getCoordinates(city);
+            if (!coordinates) return { error: "Invalid city name. Please try again." };
+
+            const { lat, lng } = coordinates;
+            const baseUrl = "https://api.open-meteo.com/v1/forecast";
+            const dailyParams = "temperature_2m_max,temperature_2m_min,precipitation_sum,rain_sum,showers_sum,sunrise,sunset";
+            const url = `${baseUrl}?latitude=${lat}&longitude=${lng}&daily=${dailyParams}&timezone=auto`;
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("Failed to fetch weather data");
+                return await response.json();
+            } catch (error) {
+                console.error(error.message);
+                return { error: "Failed to fetch weather data." };
+            }
+        }
+
+        function displayForecast(data) {
+            const forecastDiv = document.getElementById("forecast");
+            forecastDiv.innerHTML = "";
+
+            if (data.error) {
+                forecastDiv.textContent = data.error;
+                return;
+            }
+
+            const { daily } = data;
+            const forecastHTML = daily.time.map((date, i) => {
+                const sunriseTime = daily.sunrise[i]?.split("T")[1]?.slice(0, 5) || "N/A";
+                const sunsetTime = daily.sunset[i]?.split("T")[1]?.slice(0, 5) || "N/A";
+
+                return `
+                    <div>
+                        <h3>Date: ${date}</h3>
+                        <p>Min Temperature: ${daily.temperature_2m_min[i] ?? "N/A"}°C</p>
+                        <p>Max Temperature: ${daily.temperature_2m_max[i] ?? "N/A"}°C</p>
+                        <p>Precipitation: ${daily.precipitation_sum[i] ?? "N/A"} mm</p>
+                        <p>Rain: ${daily.rain_sum[i] ?? "N/A"} mm</p>
+                        <p>Showers: ${daily.showers_sum[i] ?? "N/A"} mm</p>
+                        <p>Sunrise: ${sunriseTime}</p>
+                        <p>Sunset: ${sunsetTime}</p>
+                    </div>
+                `;
+            }).join("");
+
+            forecastDiv.innerHTML = `<h2>🌦️ Agricultural Weather Forecast:</h2>${forecastHTML}`;
+        }
+
+        document.getElementById("getForecastBtn").addEventListener("click", async () => {
+            const city = document.getElementById("cityInput").value;
+            if (!city) {
+                alert("No valid city name was provided.");
+                return;
+            }
+
+            const forecastData = await getWeatherForecast(city);
+            displayForecast(forecastData);
+        });
     </script>
 </body>
 </html>
-
